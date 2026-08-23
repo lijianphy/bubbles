@@ -120,6 +120,54 @@ func TestValueSoftWrap(t *testing.T) {
 	}
 }
 
+func TestVisualLineCount(t *testing.T) {
+	tests := []struct {
+		name  string
+		width int
+		value string
+		want  int
+	}{
+		{
+			name:  "single line",
+			width: 8,
+			value: "abc",
+			want:  1,
+		},
+		{
+			name:  "logical lines",
+			width: 8,
+			value: "one\ntwo\nthree",
+			want:  3,
+		},
+		{
+			name:  "soft wrapped line",
+			width: 5,
+			value: "abcdefgh",
+			want:  2,
+		},
+		{
+			name:  "wide runes and trailing cursor",
+			width: 4,
+			value: "你好世界",
+			want:  3,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			textarea := New()
+			textarea.Prompt = ""
+			textarea.ShowLineNumbers = false
+			textarea.SetWidth(test.width)
+			textarea.SetValue(test.value)
+
+			if got := textarea.VisualLineCount(); got != test.want {
+				t.Fatalf("VisualLineCount() = %d, want %d", got, test.want)
+			}
+		})
+	}
+}
+
 func TestSetValue(t *testing.T) {
 	textarea := newTextArea()
 	textarea.SetValue(strings.Join([]string{"Foo", "Bar", "Baz"}, "\n"))

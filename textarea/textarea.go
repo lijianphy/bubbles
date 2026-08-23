@@ -670,6 +670,12 @@ func (m *Model) LineCount() int {
 	return len(m.value)
 }
 
+// VisualLineCount returns the number of display lines in the text input,
+// accounting for soft wrapping.
+func (m *Model) VisualLineCount() int {
+	return m.totalVisualLines()
+}
+
 // Line returns the 0-indexed row position of the cursor.
 func (m Model) Line() int {
 	return m.row
