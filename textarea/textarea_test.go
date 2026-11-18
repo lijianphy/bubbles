@@ -121,6 +121,40 @@ func TestValueSoftWrap(t *testing.T) {
 	}
 }
 
+func TestUnicodeWrap(t *testing.T) {
+	for _, tt := range []struct {
+		text  string
+		width int
+		want  string // Includes the final cursor cell.
+	}{
+		{"AB中文测试", 6, "AB中文\n测试 "},
+		{"中文测试", 5, "中文\n测试 "},
+		{"あいう。え", 6, "あい\nう。え\n "},
+		{"あ「いう", 4, "あ\n「い\nう "},
+		{"ab👩‍🔬中", 3, "ab\n👩‍🔬\n中 "},
+	} {
+		var rows []string
+		for _, row := range wrap([]rune(tt.text), tt.width) {
+			rows = append(rows, string(row))
+		}
+		if got := strings.Join(rows, "\n"); got != tt.want {
+			t.Errorf("wrap(%q, %d) = %q, want %q", tt.text, tt.width, got, tt.want)
+		}
+	}
+}
+
+func BenchmarkWrapLongLine(b *testing.B) {
+	for name, phrase := range map[string]string{"ASCII": "example text ", "CJK": "中文测试。"} {
+		b.Run(name, func(b *testing.B) {
+			line := []rune(strings.Repeat(phrase, 500))
+			b.ReportAllocs()
+			for b.Loop() {
+				wrap(line, 79)
+			}
+		})
+	}
+}
+
 func TestVisualLineCount(t *testing.T) {
 	tests := []struct {
 		name  string

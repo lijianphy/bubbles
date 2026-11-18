@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"charm.land/bubbles/v2/cursor"
 	"charm.land/bubbles/v2/internal/memoization"
@@ -2024,72 +2025,39 @@ func Paste() tea.Msg {
 }
 
 func wrap(runes []rune, width int) [][]rune {
-	var (
-		lines  = [][]rune{{}}
-		word   = []rune{}
-		row    int
-		spaces int
-	)
-
-	// Word wrap the runes
-	for _, r := range runes {
-		if unicode.IsSpace(r) {
-			spaces++
-		} else {
-			word = append(word, r)
+	// Cached rows must not alias the editable buffer. Keep one owned copy,
+	// including the final cell used to display the end-of-input cursor.
+	cells := make([]rune, len(runes)+1)
+	copy(cells, runes)
+	cells[len(runes)] = ' '
+	var rows [][]rune
+	var start, pos, lastBreak, lineWidth, breakWidth int
+	emit := func(end int) {
+		rows = append(rows, cells[start:end:end])
+		start = end
+	}
+	g := uniseg.NewGraphemes(string(runes))
+	for g.Next() {
+		w := g.Width()
+		if lineWidth+w > width && lastBreak > start {
+			emit(lastBreak)
+			lineWidth -= breakWidth
 		}
-
-		if spaces > 0 { //nolint:nestif
-			if uniseg.StringWidth(string(lines[row]))+uniseg.StringWidth(string(word))+spaces > width {
-				row++
-				lines = append(lines, []rune{})
-				lines[row] = append(lines[row], word...)
-				lines[row] = append(lines[row], repeatSpaces(spaces)...)
-				spaces = 0
-				word = nil
-			} else {
-				lines[row] = append(lines[row], word...)
-				lines[row] = append(lines[row], repeatSpaces(spaces)...)
-				spaces = 0
-				word = nil
-			}
-		} else {
-			// If the last character is a double-width rune, then we may not be able to add it to this line
-			// as it might cause us to go past the width.
-			lastCharLen := rw.RuneWidth(word[len(word)-1])
-			if uniseg.StringWidth(string(word))+lastCharLen > width {
-				// If the current line has any content, let's move to the next
-				// line because the current word fills up the entire line.
-				if len(lines[row]) > 0 {
-					row++
-					lines = append(lines, []rune{})
-				}
-				lines[row] = append(lines[row], word...)
-				word = nil
-			}
+		if lineWidth+w > width && pos > start {
+			emit(pos)
+			lineWidth = 0
+		}
+		lineWidth += w
+		pos += utf8.RuneCountInString(g.Str())
+		if g.LineBreak() != uniseg.LineDontBreak {
+			lastBreak, breakWidth = pos, lineWidth
 		}
 	}
-
-	if uniseg.StringWidth(string(lines[row]))+uniseg.StringWidth(string(word))+spaces >= width {
-		lines = append(lines, []rune{})
-		lines[row+1] = append(lines[row+1], word...)
-		// We add an extra space at the end of the line to account for the
-		// trailing space at the end of the previous soft-wrapped lines so that
-		// behaviour when navigating is consistent and so that we don't need to
-		// continually add edges to handle the last line of the wrapped input.
-		spaces++
-		lines[row+1] = append(lines[row+1], repeatSpaces(spaces)...)
-	} else {
-		lines[row] = append(lines[row], word...)
-		spaces++
-		lines[row] = append(lines[row], repeatSpaces(spaces)...)
+	if lineWidth >= width && pos > start {
+		emit(pos)
 	}
-
-	return lines
-}
-
-func repeatSpaces(n int) []rune {
-	return []rune(strings.Repeat(string(' '), n))
+	emit(len(cells))
+	return rows
 }
 
 // numDigits returns the number of digits in an integer.
